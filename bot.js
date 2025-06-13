@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Your bot token from @BotFather
-const BOT_TOKEN = '7664899794:AAF4pSZMODZlgouvcL3jim-9_1ntDsmWvsY';
+const BOT_TOKEN = process.env.BOT_TOKEN || '7664899794:AAF4pSZMODZlgouvcL3jim-9_1ntDsmWvsY';
 
 // Create bot instance
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
