@@ -1,13 +1,5 @@
 [
   {
-    "username": "iLatke",
-    "userId": 1492845635,
-    "firstName": "Latke |",
-    "lastName": "N/A",
-    "signupDate": "2025-06-13T02:09:48.363Z",
-    "timestamp": 1749780588364
-  },
-  {
     "username": "blipsol",
     "userId": 7430251226,
     "firstName": "blip",
@@ -30,5 +22,21 @@
     "lastName": "N/A",
     "signupDate": "2025-06-13T02:37:36.906Z",
     "timestamp": 1749782256906
+  },
+  {
+    "userId": 1492845635,
+    "username": "iLatke",
+    "firstName": "Latke |",
+    "lastName": null,
+    "timestamp": "2025-06-14T06:33:05.200Z",
+    "chatId": 1492845635
+  },
+  {
+    "userId": 931539237,
+    "username": "AvatarZeroo",
+    "firstName": "0xAvatar",
+    "lastName": null,
+    "timestamp": "2025-06-14T06:36:32.139Z",
+    "chatId": 931539237
   }
 ]
