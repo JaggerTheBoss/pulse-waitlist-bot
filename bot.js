@@ -60,39 +60,42 @@ function saveTracker(data) {
     }
 }
 
-// Function to format signup list for channel
+// Function to format signup list for channel (FIXED for Markdown parsing)
 function formatSignupList(signups) {
-    const header = `📊 **Pulse Waitlist Dashboard**\n\n**Total Signups: ${signups.length}**\n\n`;
+    const header = `📊 Pulse Waitlist Dashboard\n\nTotal Signups: ${signups.length}\n\n`;
     
     if (signups.length === 0) {
         return header + "No signups yet.";
     }
     
-    let list = header + "**Recent Signups:**\n";
+    let list = header + "Recent Signups:\n";
     
-    // Show last 20 signups (most recent first)
-    const recentSignups = signups.slice(-20).reverse();
+    // Show signups in reverse order (most recent first)
+    const recentSignups = signups.slice().reverse();
     
-    recentSignups.forEach((signup, index) => {
+    for (let i = 0; i < recentSignups.length; i++) {
+        const signup = recentSignups[i];
         const date = new Date(signup.timestamp).toLocaleDateString();
         const username = signup.username ? `@${signup.username}` : 'No username';
         const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
         
-        list += `${index + 1}. ${name} (${username}) - ${date}\n`;
-    });
-    
-    if (signups.length > 20) {
-        list += `\n...and ${signups.length - 20} more signups`;
+        const newLine = `${i + 1}. ${name} (${username}) - ${date}\n`;
+        
+        // Check if adding this line would exceed 4000 characters
+        if ((list + newLine).length > 3900) { // Leave some buffer
+            list += `\n...+${signups.length - i} more signups`;
+            break;
+        }
+        
+        list += newLine;
     }
     
-    list += `\n\n🕐 Last updated: ${new Date().toLocaleString('en-US', {
+    list += `\n🕐 Last updated: ${new Date().toLocaleString('en-US', {
         timeZone: 'America/New_York',
-        year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: true
     })} EST`;
     
@@ -112,20 +115,22 @@ async function notifyAdminChannel(signup, isNew = true) {
         // Update the pinned message with current signup list
         const listMessage = formatSignupList(signups);
         
+        console.log(`Dashboard message length: ${listMessage.length} characters`);
+        
         if (tracker.pinnedMessageId && isNew) {
             // Edit existing pinned message
             try {
                 await bot.editMessageText(listMessage, {
                     chat_id: ADMIN_CHANNEL_ID,
                     message_id: tracker.pinnedMessageId,
-                    parse_mode: 'Markdown'
+                    parse_mode: 'HTML' // Changed from Markdown to HTML
                 });
                 console.log('Successfully updated pinned message');
             } catch (editError) {
                 console.log('Could not edit pinned message:', editError.message);
                 console.log('Creating new pinned message...');
                 
-                const newMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'Markdown' });
+                const newMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'HTML' });
                 tracker.pinnedMessageId = newMessage.message_id;
                 saveTracker(tracker);
                 console.log(`Created new pinned message with ID: ${newMessage.message_id}`);
@@ -133,7 +138,7 @@ async function notifyAdminChannel(signup, isNew = true) {
         } else if (!tracker.pinnedMessageId) {
             // Create initial pinned message
             console.log('Creating initial pinned message...');
-            const pinnedMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'Markdown' });
+            const pinnedMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'HTML' });
             tracker.pinnedMessageId = pinnedMessage.message_id;
             saveTracker(tracker);
             console.log(`Created initial pinned message with ID: ${pinnedMessage.message_id}`);
@@ -164,9 +169,9 @@ async function notifyAdminChannel(signup, isNew = true) {
                 hour12: true
             });
             
-            const notificationMessage = `🎉 **New Signup!**\n\n👤 ${name}\n📱 ${username}\n🆔 ${signup.userId}\n⏰ ${estTime} EST\n\n**Total: ${signups.length} signups**`;
+            const notificationMessage = `🎉 New Signup!\n\n👤 ${name}\n📱 ${username}\n🆔 ${signup.userId}\n⏰ ${estTime} EST\n\nTotal: ${signups.length} signups`;
             
-            await bot.sendMessage(ADMIN_CHANNEL_ID, notificationMessage, { parse_mode: 'Markdown' });
+            await bot.sendMessage(ADMIN_CHANNEL_ID, notificationMessage, { parse_mode: 'HTML' });
             console.log('Successfully sent new signup notification');
         }
         
@@ -369,18 +374,15 @@ bot.onText(/\/signups/, async (msg) => {
             return;
         }
         
-        // Split into chunks to avoid message length limits
-        const chunkSize = 15; // Show 15 signups per message
-        const chunks = [];
-        
+        // Split signups into chunks, showing MOST RECENT FIRST
         for (let i = 0; i < signups.length; i += chunkSize) {
-            const chunk = signups.slice(i, i + chunkSize);
+            const chunk = signups.slice().reverse().slice(i, i + chunkSize); // Reverse entire array first
             let message = '';
             
             if (i === 0) {
-                message = `📋 *Pulse Waitlist Signups* (${signups.length} total)\n\n`;
+                message = `📋 Pulse Waitlist Signups (${signups.length} total)\n\n`;
             } else {
-                message = `📋 *Signups continued...* (${i + 1}-${Math.min(i + chunkSize, signups.length)} of ${signups.length})\n\n`;
+                message = `📋 Signups continued... (${i + 1}-${Math.min(i + chunkSize, signups.length)} of ${signups.length})\n\n`;
             }
             
             chunk.forEach((signup, index) => {
@@ -396,7 +398,7 @@ bot.onText(/\/signups/, async (msg) => {
         
         // Send all chunks
         for (const chunk of chunks) {
-            await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
             // Small delay between messages to avoid rate limiting
             if (chunks.length > 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -407,6 +409,72 @@ bot.onText(/\/signups/, async (msg) => {
         
     } catch (error) {
         console.error('Error in /signups command:', error);
+        await bot.sendMessage(chatId, `❌ Error loading signups: ${error.message}`);
+    }
+});
+
+// Admin command to view signups OLDEST FIRST
+bot.onText(/\/old/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    try {
+        // Admin user IDs - both you and your team member
+        const ADMIN_USER_IDS = [1492845635, 7430251226];
+        
+        if (!ADMIN_USER_IDS.includes(userId)) {
+            await bot.sendMessage(chatId, '❌ Unauthorized access.');
+            return;
+        }
+        
+        console.log(`Admin ${userId} requested signups list (oldest first)`);
+        
+        const signups = loadSignups();
+        console.log(`Loaded ${signups.length} signups`);
+        
+        if (signups.length === 0) {
+            await bot.sendMessage(chatId, '📋 No signups yet!');
+            return;
+        }
+        
+        // Split signups into chunks, showing OLDEST FIRST (no reverse)
+        const chunkSize = 15;
+        const chunks = [];
+        
+        for (let i = 0; i < signups.length; i += chunkSize) {
+            const chunk = signups.slice(i, i + chunkSize); // No reverse - keeps original order
+            let message = '';
+            
+            if (i === 0) {
+                message = `📋 Pulse Waitlist Signups - OLDEST FIRST (${signups.length} total)\n\n`;
+            } else {
+                message = `📋 Signups continued... (${i + 1}-${Math.min(i + chunkSize, signups.length)} of ${signups.length})\n\n`;
+            }
+            
+            chunk.forEach((signup, index) => {
+                const date = new Date(signup.timestamp).toLocaleDateString();
+                const username = signup.username ? `@${signup.username}` : 'No username';
+                const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
+                
+                message += `${i + index + 1}. ${name} (${username}) - ${date}\n`;
+            });
+            
+            chunks.push(message);
+        }
+        
+        // Send all chunks
+        for (const chunk of chunks) {
+            await bot.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
+            // Small delay between messages to avoid rate limiting
+            if (chunks.length > 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+        
+        console.log(`Successfully sent ${chunks.length} signup messages to admin (oldest first)`);
+        
+    } catch (error) {
+        console.error('Error in /old command:', error);
         await bot.sendMessage(chatId, `❌ Error loading signups: ${error.message}`);
     }
 });
@@ -547,7 +615,7 @@ app.get('/signups', (req, res) => {
 // Middleware for JSON parsing
 app.use(express.json());
 
-// Restore form (GET) - shows upload form
+// Restore form (GET) - shows upload form with password protection
 app.get('/restore/signups', (req, res) => {
     const html = `
     <!DOCTYPE html>
@@ -558,26 +626,46 @@ app.get('/restore/signups', (req, res) => {
             body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a2e; color: white; }
             h1 { color: #e94560; }
             .form-container { background: #16213e; padding: 20px; border-radius: 8px; max-width: 600px; }
-            textarea { width: 100%; height: 300px; background: #0f3460; color: white; border: 1px solid #e94560; border-radius: 4px; padding: 10px; font-family: monospace; }
+            input, textarea { width: 100%; background: #0f3460; color: white; border: 1px solid #e94560; border-radius: 4px; padding: 10px; margin-bottom: 10px; }
+            textarea { height: 300px; font-family: monospace; }
             button { background: #e94560; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
             button:hover { background: #d63851; }
             .back-btn { background: #16213e; border: 1px solid #e94560; margin-right: 10px; }
             .back-btn:hover { background: #0f3460; }
+            .password-section { margin-bottom: 20px; }
         </style>
     </head>
     <body>
         <h1>🔄 Restore Pulse Signups</h1>
         <div class="form-container">
-            <h3>Paste your backup JSON below:</h3>
-            <form action="/restore/signups" method="POST">
-                <textarea name="backup" placeholder='Paste your JSON backup here... Should start with [ and end with ]'></textarea>
-                <br>
-                <button type="button" class="back-btn" onclick="window.location.href='/signups'">← Back to Dashboard</button>
-                <button type="submit">🔄 Restore Signups</button>
-            </form>
+            <div class="password-section">
+                <h3>🔐 Admin Password Required:</h3>
+                <input type="password" id="password" placeholder="Enter admin password..." />
+                <button onclick="checkPassword()">Unlock</button>
+            </div>
+            
+            <div id="restore-form" style="display: none;">
+                <h3>Paste your backup JSON below:</h3>
+                <form action="/restore/signups" method="POST">
+                    <textarea name="backup" placeholder='Paste your JSON backup here... Should start with [ and end with ]'></textarea>
+                    <br>
+                    <button type="button" class="back-btn" onclick="window.location.href='/signups'">← Back to Dashboard</button>
+                    <button type="submit">🔄 Restore Signups</button>
+                </form>
+            </div>
         </div>
         
         <script>
+            function checkPassword() {
+                const password = document.getElementById('password').value;
+                if (password === 'latke123') {
+                    document.querySelector('.password-section').style.display = 'none';
+                    document.getElementById('restore-form').style.display = 'block';
+                } else {
+                    alert('❌ Incorrect password!');
+                }
+            }
+            
             // Handle form submission
             document.querySelector('form').addEventListener('submit', async (e) => {
                 e.preventDefault();
