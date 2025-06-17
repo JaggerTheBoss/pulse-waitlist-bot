@@ -547,7 +547,76 @@ app.get('/signups', (req, res) => {
 // Middleware for JSON parsing
 app.use(express.json());
 
-// RESTORE endpoint for backup data
+// Restore form (GET) - shows upload form
+app.get('/restore/signups', (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Restore Pulse Signups</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a2e; color: white; }
+            h1 { color: #e94560; }
+            .form-container { background: #16213e; padding: 20px; border-radius: 8px; max-width: 600px; }
+            textarea { width: 100%; height: 300px; background: #0f3460; color: white; border: 1px solid #e94560; border-radius: 4px; padding: 10px; font-family: monospace; }
+            button { background: #e94560; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+            button:hover { background: #d63851; }
+            .back-btn { background: #16213e; border: 1px solid #e94560; margin-right: 10px; }
+            .back-btn:hover { background: #0f3460; }
+        </style>
+    </head>
+    <body>
+        <h1>🔄 Restore Pulse Signups</h1>
+        <div class="form-container">
+            <h3>Paste your backup JSON below:</h3>
+            <form action="/restore/signups" method="POST">
+                <textarea name="backup" placeholder='Paste your JSON backup here... Should start with [ and end with ]'></textarea>
+                <br>
+                <button type="button" class="back-btn" onclick="window.location.href='/signups'">← Back to Dashboard</button>
+                <button type="submit">🔄 Restore Signups</button>
+            </form>
+        </div>
+        
+        <script>
+            // Handle form submission
+            document.querySelector('form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const backup = document.querySelector('textarea').value.trim();
+                
+                if (!backup) {
+                    alert('Please paste your backup JSON first!');
+                    return;
+                }
+                
+                try {
+                    const jsonData = JSON.parse(backup);
+                    
+                    const response = await fetch('/restore/signups', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(jsonData)
+                    });
+                    
+                    const result = await response.text();
+                    
+                    if (response.ok) {
+                        alert('✅ ' + result);
+                        window.location.href = '/signups';
+                    } else {
+                        alert('❌ ' + result);
+                    }
+                } catch (error) {
+                    alert('❌ Invalid JSON format: ' + error.message);
+                }
+            });
+        </script>
+    </body>
+    </html>
+    `;
+    res.send(html);
+});
+
+// RESTORE endpoint for backup data (POST)
 app.post('/restore/signups', (req, res) => {
     try {
         const signups = req.body;
