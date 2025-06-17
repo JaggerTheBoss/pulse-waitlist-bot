@@ -375,6 +375,9 @@ bot.onText(/\/signups/, async (msg) => {
         }
         
         // Split signups into chunks, showing MOST RECENT FIRST
+        const chunkSize = 15; // Define chunkSize variable
+        const chunks = [];
+        
         for (let i = 0; i < signups.length; i += chunkSize) {
             const chunk = signups.slice().reverse().slice(i, i + chunkSize); // Reverse entire array first
             let message = '';
@@ -390,7 +393,9 @@ bot.onText(/\/signups/, async (msg) => {
                 const username = signup.username ? `@${signup.username}` : 'No username';
                 const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
                 
-                message += `${i + index + 1}. ${name} (${username}) - ${date}\n`;
+                // Fix numbering: most recent should have highest number
+                const signupNumber = signups.length - (i + index);
+                message += `${signupNumber}. ${name} (${username}) - ${date}\n`;
             });
             
             chunks.push(message);
