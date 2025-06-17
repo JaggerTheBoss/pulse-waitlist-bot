@@ -85,7 +85,16 @@ function formatSignupList(signups) {
         list += `\n...and ${signups.length - 20} more signups`;
     }
     
-    list += `\n\n🕐 Last updated: ${new Date().toLocaleString()}`;
+    list += `\n\n🕐 Last updated: ${new Date().toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    })} EST`;
     
     return list;
 }
@@ -142,7 +151,20 @@ async function notifyAdminChannel(signup, isNew = true) {
         if (isNew && signup) {
             const username = signup.username ? `@${signup.username}` : 'No username';
             const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
-            const notificationMessage = `🎉 **New Signup!**\n\n👤 ${name}\n📱 ${username}\n🆔 ${signup.userId}\n⏰ ${new Date().toLocaleString()}\n\n**Total: ${signups.length} signups**`;
+            
+            // Convert to EST timezone
+            const estTime = new Date().toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            
+            const notificationMessage = `🎉 **New Signup!**\n\n👤 ${name}\n📱 ${username}\n🆔 ${signup.userId}\n⏰ ${estTime} EST\n\n**Total: ${signups.length} signups**`;
             
             await bot.sendMessage(ADMIN_CHANNEL_ID, notificationMessage, { parse_mode: 'Markdown' });
             console.log('Successfully sent new signup notification');
@@ -522,11 +544,6 @@ app.get('/signups', (req, res) => {
     }
 });
 
-// Health check endpoint
-app.get('/', (req, res) => {
-    res.send('🚀 Pulse Waitlist Bot is running!');
-});
-
 // Middleware for JSON parsing
 app.use(express.json());
 
@@ -545,6 +562,11 @@ app.post('/restore/signups', (req, res) => {
         console.error('Error restoring signups:', error);
         res.status(500).send(`❌ Error restoring signups: ${error.message}`);
     }
+});
+
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.send('🚀 Pulse Waitlist Bot is running!');
 });
 
 // Start Express server
