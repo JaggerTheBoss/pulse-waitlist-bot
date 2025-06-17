@@ -76,7 +76,7 @@ function formatSignupList(signups) {
     recentSignups.forEach((signup, index) => {
         const date = new Date(signup.timestamp).toLocaleDateString();
         const username = signup.username ? `@${signup.username}` : 'No username';
-        const name = signup.firstName + (signup.lastName ? ` ${signup.lastName}` : '');
+        const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
         
         list += `${index + 1}. ${name} (${username}) - ${date}\n`;
     });
@@ -90,16 +90,15 @@ function formatSignupList(signups) {
     return list;
 }
 
-// Function to send notification to admin channel
+// Function to send notification to admin channel (FIXED)
 async function notifyAdminChannel(signup, isNew = true) {
-    if (ADMIN_CHANNEL_ID === 'YOUR_CHANNEL_ID_HERE') {
-        console.log('Admin channel not configured');
-        return;
-    }
+    console.log(`notifyAdminChannel called - isNew: ${isNew}, channelId: ${ADMIN_CHANNEL_ID}`);
     
     try {
         const signups = loadSignups();
         const tracker = loadTracker();
+        
+        console.log(`Loaded ${signups.length} signups, tracker pinnedMessageId: ${tracker.pinnedMessageId}`);
         
         // Update the pinned message with current signup list
         const listMessage = formatSignupList(signups);
@@ -112,37 +111,51 @@ async function notifyAdminChannel(signup, isNew = true) {
                     message_id: tracker.pinnedMessageId,
                     parse_mode: 'Markdown'
                 });
+                console.log('Successfully updated pinned message');
             } catch (editError) {
-                console.log('Could not edit pinned message, creating new one');
+                console.log('Could not edit pinned message:', editError.message);
+                console.log('Creating new pinned message...');
+                
                 const newMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'Markdown' });
                 tracker.pinnedMessageId = newMessage.message_id;
                 saveTracker(tracker);
+                console.log(`Created new pinned message with ID: ${newMessage.message_id}`);
             }
         } else if (!tracker.pinnedMessageId) {
             // Create initial pinned message
+            console.log('Creating initial pinned message...');
             const pinnedMessage = await bot.sendMessage(ADMIN_CHANNEL_ID, listMessage, { parse_mode: 'Markdown' });
             tracker.pinnedMessageId = pinnedMessage.message_id;
             saveTracker(tracker);
+            console.log(`Created initial pinned message with ID: ${pinnedMessage.message_id}`);
             
             // Try to pin the message
             try {
                 await bot.pinChatMessage(ADMIN_CHANNEL_ID, pinnedMessage.message_id);
+                console.log('Successfully pinned message');
             } catch (pinError) {
-                console.log('Could not pin message (bot needs admin rights)');
+                console.log('Could not pin message (bot needs admin rights):', pinError.message);
             }
         }
         
         // Send individual notification for new signups
-        if (isNew) {
+        if (isNew && signup) {
             const username = signup.username ? `@${signup.username}` : 'No username';
-            const name = signup.firstName + (signup.lastName ? ` ${signup.lastName}` : '');
+            const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
             const notificationMessage = `🎉 **New Signup!**\n\n👤 ${name}\n📱 ${username}\n🆔 ${signup.userId}\n⏰ ${new Date().toLocaleString()}\n\n**Total: ${signups.length} signups**`;
             
             await bot.sendMessage(ADMIN_CHANNEL_ID, notificationMessage, { parse_mode: 'Markdown' });
+            console.log('Successfully sent new signup notification');
         }
         
     } catch (error) {
-        console.error('Error sending admin notification:', error);
+        console.error('Error in notifyAdminChannel:', error);
+        console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            code: error.code,
+            response: error.response?.body
+        });
     }
 }
 
@@ -310,41 +323,74 @@ Ready to get early access to the future of trading?`;
     bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// Admin command to view signups (optional)
-bot.onText(/\/signups/, (msg) => {
+// Admin command to view signups (FIXED)
+bot.onText(/\/signups/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     
-    // Admin user IDs - both you and your team member
-    const ADMIN_USER_IDS = [1492845635, 7430251226];
-    
-    if (!ADMIN_USER_IDS.includes(userId)) {
-        bot.sendMessage(chatId, '❌ Unauthorized access.');
-        return;
-    }
-    
-    const signups = loadSignups();
-    
-    if (signups.length === 0) {
-        bot.sendMessage(chatId, '📋 No signups yet!');
-        return;
-    }
-    
-    let message = `📋 *Pulse Waitlist Signups* (${signups.length} total)\n\n`;
-    
-    signups.forEach((signup, index) => {
-        const date = new Date(signup.timestamp).toLocaleDateString();
-        const username = signup.username ? `@${signup.username}` : 'No username';
-        const name = signup.firstName + (signup.lastName ? ` ${signup.lastName}` : '');
+    try {
+        // Admin user IDs - both you and your team member
+        const ADMIN_USER_IDS = [1492845635, 7430251226];
         
-        message += `${index + 1}. ${name} (${username}) - ${date}\n`;
-    });
-    
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+        if (!ADMIN_USER_IDS.includes(userId)) {
+            await bot.sendMessage(chatId, '❌ Unauthorized access.');
+            return;
+        }
+        
+        console.log(`Admin ${userId} requested signups list`);
+        
+        const signups = loadSignups();
+        console.log(`Loaded ${signups.length} signups`);
+        
+        if (signups.length === 0) {
+            await bot.sendMessage(chatId, '📋 No signups yet!');
+            return;
+        }
+        
+        // Split into chunks to avoid message length limits
+        const chunkSize = 15; // Show 15 signups per message
+        const chunks = [];
+        
+        for (let i = 0; i < signups.length; i += chunkSize) {
+            const chunk = signups.slice(i, i + chunkSize);
+            let message = '';
+            
+            if (i === 0) {
+                message = `📋 *Pulse Waitlist Signups* (${signups.length} total)\n\n`;
+            } else {
+                message = `📋 *Signups continued...* (${i + 1}-${Math.min(i + chunkSize, signups.length)} of ${signups.length})\n\n`;
+            }
+            
+            chunk.forEach((signup, index) => {
+                const date = new Date(signup.timestamp).toLocaleDateString();
+                const username = signup.username ? `@${signup.username}` : 'No username';
+                const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
+                
+                message += `${i + index + 1}. ${name} (${username}) - ${date}\n`;
+            });
+            
+            chunks.push(message);
+        }
+        
+        // Send all chunks
+        for (const chunk of chunks) {
+            await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+            // Small delay between messages to avoid rate limiting
+            if (chunks.length > 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+        
+        console.log(`Successfully sent ${chunks.length} signup messages to admin`);
+        
+    } catch (error) {
+        console.error('Error in /signups command:', error);
+        await bot.sendMessage(chatId, `❌ Error loading signups: ${error.message}`);
+    }
 });
 
 // Admin command to delete a user (debugging)
-bot.onText(/\/delete_user (.+)/, (msg, match) => {
+bot.onText(/\/delete_user (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const searchTerm = match[1].trim();
@@ -353,7 +399,7 @@ bot.onText(/\/delete_user (.+)/, (msg, match) => {
     const ADMIN_USER_IDS = [1492845635, 7430251226];
     
     if (!ADMIN_USER_IDS.includes(userId)) {
-        bot.sendMessage(chatId, '❌ Unauthorized access.');
+        await bot.sendMessage(chatId, '❌ Unauthorized access.');
         return;
     }
     
@@ -378,14 +424,13 @@ bot.onText(/\/delete_user (.+)/, (msg, match) => {
     if (signups.length < originalCount) {
         saveSignups(signups);
         const deletedCount = originalCount - signups.length;
-        bot.sendMessage(chatId, `✅ Deleted ${deletedCount} user(s) matching "${searchTerm}"\n\nNew total: ${signups.length} signups`);
+        await bot.sendMessage(chatId, `✅ Deleted ${deletedCount} user(s) matching "${searchTerm}"\n\nNew total: ${signups.length} signups`);
         
         // Update admin channel dashboard
-        if (ADMIN_CHANNEL_ID !== 'YOUR_CHANNEL_ID_HERE') {
-            notifyAdminChannel(null, false);
-        }
+        await notifyAdminChannel(null, false);
+        
     } else {
-        bot.sendMessage(chatId, `❌ No users found matching "${searchTerm}"`);
+        await bot.sendMessage(chatId, `❌ No users found matching "${searchTerm}"`);
     }
 });
 
@@ -451,7 +496,7 @@ app.get('/signups', (req, res) => {
         signups.forEach((signup, index) => {
             const date = new Date(signup.timestamp).toLocaleString();
             const username = signup.username ? `@${signup.username}` : 'No username';
-            const name = signup.firstName + (signup.lastName ? ` ${signup.lastName}` : '');
+            const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
             
             html += `
                 <tr>
@@ -482,6 +527,20 @@ app.get('/', (req, res) => {
     res.send('🚀 Pulse Waitlist Bot is running!');
 });
 
+// TEMPORARY: Restore signups endpoint
+app.use(express.json());
+app.post('/restore/signups', (req, res) => {
+    try {
+        const signups = req.body;
+        fs.writeFileSync(SIGNUPS_FILE, JSON.stringify(signups, null, 2));
+        console.log(`Restored ${signups.length} signups from backup`);
+        res.send(`✅ Restored ${signups.length} signups successfully!`);
+    } catch (error) {
+        console.error('Error restoring signups:', error);
+        res.status(500).send('❌ Error restoring signups');
+    }
+});
+
 // Start Express server
 app.listen(PORT, () => {
     console.log(`🌐 Web server running on port ${PORT}`);
@@ -495,11 +554,9 @@ bot.on('ready', async () => {
     console.log('Bot URL: https://t.me/pulse_waitlist_bot');
     console.log('Signups will be saved to:', SIGNUPS_FILE);
     
-    // Send initial dashboard message to admin channel
-    if (ADMIN_CHANNEL_ID !== '-1002510281572') {
-        const signups = loadSignups();
-        await notifyAdminChannel(null, false); // Send initial dashboard
-    }
+    // Send initial dashboard message to admin channel (FIXED)
+    console.log('Sending initial dashboard to admin channel...');
+    await notifyAdminChannel(null, false); // Send initial dashboard
 });
 
 // Fallback console logs
