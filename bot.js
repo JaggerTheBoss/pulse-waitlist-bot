@@ -527,17 +527,23 @@ app.get('/', (req, res) => {
     res.send('🚀 Pulse Waitlist Bot is running!');
 });
 
-// TEMPORARY: Restore signups endpoint
+// Middleware for JSON parsing
 app.use(express.json());
+
+// RESTORE endpoint for backup data
 app.post('/restore/signups', (req, res) => {
     try {
         const signups = req.body;
+        if (!Array.isArray(signups)) {
+            return res.status(400).send('❌ Invalid data format - must be an array');
+        }
+        
         fs.writeFileSync(SIGNUPS_FILE, JSON.stringify(signups, null, 2));
-        console.log(`Restored ${signups.length} signups from backup`);
-        res.send(`✅ Restored ${signups.length} signups successfully!`);
+        console.log(`✅ Restored ${signups.length} signups from backup`);
+        res.send(`✅ Successfully restored ${signups.length} signups!`);
     } catch (error) {
         console.error('Error restoring signups:', error);
-        res.status(500).send('❌ Error restoring signups');
+        res.status(500).send(`❌ Error restoring signups: ${error.message}`);
     }
 });
 
