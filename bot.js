@@ -79,7 +79,9 @@ function formatSignupList(signups) {
         const username = signup.username ? `@${signup.username}` : 'No username';
         const name = (signup.firstName || 'Unknown') + (signup.lastName ? ` ${signup.lastName}` : '');
         
-        const newLine = `${i + 1}. ${name} (${username}) - ${date}\n`;
+        // Fix numbering: most recent (first in list) should have highest number
+        const signupNumber = signups.length - i;
+        const newLine = `${signupNumber}. ${name} (${username}) - ${date}\n`;
         
         // Check if adding this line would exceed 4000 characters
         if ((list + newLine).length > 3900) { // Leave some buffer
